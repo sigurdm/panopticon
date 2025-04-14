@@ -54,13 +54,32 @@ Future<void> main(List<String> args) async {
       return {
         'major': sdkConstraint.min?.major,
         'minor': minor,
-        'lanugage-version': '$major.$minor',
+        'language-version': '$major.$minor',
       };
     },
-    await allPackageNames(),
+    (await allPackageNames()),
     retryFailed: true,
     resetData: args.contains('reset'),
     parallelism: 20,
   );
+  db.execute('''
+drop table if exists versions;
+create table versions (
+  name primary key,
+  major,
+  minor,
+  languageVersion
+)
+''');
+  db.execute('''
+insert into versions 
+select
+  name,
+  result -> '\$.major',
+  result -> '\$.minor',
+  result -> '\$.language-version'
+from
+  packages
+''');
   client.close();
 }

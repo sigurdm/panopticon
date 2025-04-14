@@ -54,8 +54,9 @@ Future<Database> analyze(
           ? Timer.periodic(Duration(seconds: 2), (timer) async {
             final doneSinceLast = alreadyDone.length - last;
             console.Cursor().save();
+            final length = tasks is List ? 'out of ${tasks.length}' : '';
             console.Cursor().write(
-              '$jobName: ${alreadyDone.length} out of ${tasks.length}. ${error.length} errors ${doneSinceLast / 2} jobs per second'
+              '$jobName: ${alreadyDone.length} $length - ${error.length} errors ${doneSinceLast / 2} jobs per second'
                   .padRight(stdout.terminalColumns),
             );
             console.Cursor().restore();
