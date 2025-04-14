@@ -62,4 +62,5 @@ Future<void> main(List<String> args) async {
     resetData: args.contains('reset'),
     parallelism: 20,
   );
+  client.close();
 }
