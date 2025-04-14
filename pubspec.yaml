@@ -1,0 +1,14 @@
+name: panopticon
+environment:
+  sdk: ^3.7.0
+dependencies:
+  pool: ^1.5.1
+  http: ^1.3.0
+  sqlite3: ^2.7.5
+  yaml: ^3.1.3
+  pub_semver: ^2.2.0
+  pub:
+    git: https://github.com/dart-lang/pub
+  pana:
+    git: https://github.com/dart-lang/pana
+  console: ^4.1.0
