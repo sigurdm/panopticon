@@ -32,31 +32,35 @@ class Itemized {
 
 Future<Database> analyze(
   String jobName,
-  Future<Object?> Function(String task) fn,
+  Future<List<List<Object?>>> Function(String task) fn,
   Iterable<String> tasks, {
   int parallelism = 10,
   Duration? taskTimeout = const Duration(seconds: 30),
   bool resetData = false,
   bool retryFailed = false,
+  List<String> columns = const ['result'],
+  List<String> primaryKeys = const [],
+  String? dbname,
 }) async {
   final scriptname = Platform.script.pathSegments.last;
 
-  final db = sqlite3.open(scriptname.replaceAll('.dart', '.sqlite'));
+  final db = sqlite3.open(dbname ?? scriptname.replaceAll('.dart', '.sqlite'));
   final pool = Pool(parallelism, timeout: taskTimeout);
   final itemized = Itemized();
   final alreadyDone = <String>{};
   final error = <String>{};
 
   var last = 0;
-
+  final stopwatch = Stopwatch()..start();
   final timer =
       stdout.hasTerminal
           ? Timer.periodic(Duration(seconds: 2), (timer) async {
             final doneSinceLast = alreadyDone.length - last;
             console.Cursor().save();
-            final length = tasks is List ? 'out of ${tasks.length}' : '';
+            final length = tasks is List ? '${tasks.length}' : '';
+            final eta = (tasks.length - alreadyDone.length) / doneSinceLast * 2;
             console.Cursor().write(
-              '$jobName: ${alreadyDone.length} $length - ${error.length} errors ${doneSinceLast / 2} jobs per second'
+              '$jobName: ${alreadyDone.length}/$length, ${error.length} errors. ${doneSinceLast / 2} j/s - Elapsed: ${stopwatch.elapsed.inSeconds}s.  Eta ${eta.toInt()} seconds.'
                   .padRight(stdout.terminalColumns),
             );
             console.Cursor().restore();
@@ -72,12 +76,17 @@ drop table $jobName ;
   }
   db.execute('''
 create table if not exists $jobName (
-  name text primary key,
-  result text,
-  error text
+  name text,
+  ${columns.map((c) => '$c').join(',\n')},
+  error text,
+  primary key (name${primaryKeys.isEmpty ? '' : ', ' + primaryKeys.join(', ')})
   )
 ''');
-  final doneTaskRows = db.select('select name, error, result from $jobName');
+  final insertQuery = db.prepare(
+    'insert into $jobName (name, ${columns.join(', ')}) values (?, ${columns.map((x) => '?').join(', ')});',
+  );
+
+  final doneTaskRows = db.select('select name, error from $jobName');
   for (final doneTask in doneTaskRows) {
     final taskName = doneTask.values[0] as String;
     if (doneTask.values[1] == null || retryFailed) {
@@ -85,6 +94,11 @@ create table if not exists $jobName (
     }
     if (doneTask.values[1] != null) {
       error.add(taskName);
+    }
+  }
+  if (stdout.hasTerminal) {
+    for (var i = 0; i < parallelism + 1; i++) {
+      print('');
     }
   }
   try {
@@ -96,23 +110,24 @@ create table if not exists $jobName (
         try {
           if (stdout.hasTerminal) {
             console.Cursor().save();
-            console.Cursor().moveUp(item + 1);
+
+            console.Cursor().moveUp(itemized.op.length - item);
             console.Cursor().write(task.padRight(stdout.terminalColumns));
             console.Cursor().restore();
           }
           final t = await fn(task);
-          db.execute(
-            '''
-insert into $jobName (name, result) values (?, ?)
-''',
-            [task, jsonEncode(t)],
-          );
-        } catch (e) {
+          for (final row in t) {
+            insertQuery.execute([
+              task,
+              ...row.map((v) => v is int ? v : jsonEncode(v)),
+            ]);
+          }
+        } catch (e, st) {
           db.execute(
             '''
 insert into $jobName (name, error) values (?, ?)
 ''',
-            [task, e.toString()],
+            [task, '$e\n$st'],
           );
         } finally {
           resource.release();
@@ -124,6 +139,10 @@ insert into $jobName (name, error) values (?, ?)
   } finally {
     await pool.close();
     timer?.cancel();
+    insertQuery.dispose();
   }
+  print(
+    '${stopwatch.elapsed.inSeconds} seconds. ${alreadyDone.length} tasks. ${error.length} errors.',
+  );
   return db;
 }
