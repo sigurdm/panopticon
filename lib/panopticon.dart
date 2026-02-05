@@ -57,10 +57,22 @@ Future<Database> analyze(
           ? Timer.periodic(Duration(seconds: 2), (timer) async {
             final doneSinceLast = alreadyDone.length - last;
             console.Cursor().save();
-            final length = tasks is List ? '${tasks.length}' : '';
-            final eta = (tasks.length - alreadyDone.length) / doneSinceLast * 2;
+            String length = '';
+            String eta = '';
+            if (tasks is List) {
+              length = '/${tasks.length}';
+              final etaS =
+                  doneSinceLast == 0
+                      ? 0
+                      : (tasks.length - alreadyDone.length) ~/
+                          doneSinceLast *
+                          2;
+              final etaDuration = Duration(seconds: etaS);
+              eta =
+                  ' Eta ${etaDuration.inHours.toString().padLeft(2, '0')}:${(etaDuration.inMinutes % 60).toString().padLeft(2, '0')}:${etaDuration.inSeconds % 60}';
+            }
             console.Cursor().write(
-              '$jobName: ${alreadyDone.length}/$length, ${error.length} errors. ${doneSinceLast / 2} j/s - Elapsed: ${stopwatch.elapsed.inSeconds}s.  Eta ${eta.toInt()} seconds.'
+              '$jobName: ${alreadyDone.length}$length, ${error.length} errors. ${doneSinceLast / 2} j/s - Elapsed: ${stopwatch.elapsed.inSeconds}s.$eta'
                   .padRight(stdout.terminalColumns),
             );
             console.Cursor().restore();
@@ -71,7 +83,7 @@ Future<Database> analyze(
   db.execute('PRAGMA journal_mode=WAL;');
   if (resetData) {
     db.execute('''
-drop table $jobName ;
+drop table if exists $jobName ;
 ''');
   }
   db.execute('''
@@ -83,7 +95,7 @@ create table if not exists $jobName (
   )
 ''');
   final insertQuery = db.prepare(
-    'insert into $jobName (name, ${columns.join(', ')}) values (?, ${columns.map((x) => '?').join(', ')});',
+    'insert or REPLACE into $jobName (name, ${columns.join(', ')}) values (?, ${columns.map((x) => '?').join(', ')});',
   );
 
   final doneTaskRows = db.select('select name, error from $jobName');
@@ -119,13 +131,13 @@ create table if not exists $jobName (
           for (final row in t) {
             insertQuery.execute([
               task,
-              ...row.map((v) => v is int ? v : jsonEncode(v)),
+              ...row.map((v) => v is int || v is String ? v : jsonEncode(v)),
             ]);
           }
         } catch (e, st) {
           db.execute(
             '''
-insert into $jobName (name, error) values (?, ?)
+insert or REPLACE into $jobName (name, error) values (?, ?)
 ''',
             [task, '$e\n$st'],
           );

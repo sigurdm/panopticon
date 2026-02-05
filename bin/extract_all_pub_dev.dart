@@ -39,6 +39,9 @@ Future<Object?> versionListing(String packageName) async {
 Future<void> main() async {
   analyze(
     'packages',
+    parallelism: 30,
+    taskTimeout: Duration(seconds: 60),
+    columns: ['result'],
     (packageName) async {
       final pubspecFile = File(
         p.join('../all_latest_version', packageName, 'pubspec.yaml'),
@@ -50,18 +53,22 @@ Future<void> main() async {
       final archiveSha256 = latest['archive_sha256'];
 
       if (pubspecFile.existsSync()) {
-        final pubspec = loadYaml(pubspecFile.readAsStringSync());
+        final pubspec = loadYaml(await pubspecFile.readAsString());
         if (pubspec['version'] != latestVersion) {
           Directory(
             p.join('../all_latest_version', packageName),
           ).deleteSync(recursive: true);
           // print('Redownloading $packageName');
         } else {
-          return {
-            'version': latestVersion,
-            'pubspec': pubspec,
-            'archive_sha256': archiveSha256,
-          };
+          return [
+            [
+              {
+                'version': latestVersion,
+                'pubspec': pubspec,
+                'archive_sha256': archiveSha256,
+              },
+            ],
+          ];
         }
       }
       final response = await client.send(Request('get', Uri.parse(archiveUrl)));
@@ -72,7 +79,15 @@ Future<void> main() async {
       // print('Downloading $packageName');
 
       final pubspec = loadYaml(pubspecFile.readAsStringSync());
-      return {'version': latestVersion, 'pubspec': pubspec};
+      return [
+        [
+          {
+            'version': latestVersion,
+            'pubspec': pubspec,
+            'archive_sha256': archiveSha256,
+          },
+        ],
+      ];
     },
     await allPackageNames(),
     retryFailed: true,

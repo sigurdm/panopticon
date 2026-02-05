@@ -19,6 +19,11 @@ Future<Object?> scoreListing(Client client, String packageName) async {
   return jsonDecode(await client.read(url));
 }
 
+Future<String> logs(Client client, String packageName) async {
+  final url = Uri.https('pub.dev', '/packages/$packageName/score/log.txt');
+  return await client.read(url);
+}
+
 Future<T> withClient<T>(Future<T> fn(Client client)) async {
   final client = Client();
   try {

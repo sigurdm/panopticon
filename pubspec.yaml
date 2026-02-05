@@ -12,3 +12,16 @@ dependencies:
   pana:
     git: https://github.com/dart-lang/pana
   console: ^4.1.0
+  crypto: ^3.0.6
+  convert: ^3.1.2
+  collection: ^1.19.1
+  typed_data: ^1.4.0
+  ffi: ^2.1.4
+dev_dependencies:
+  ffigen: ^18.1.0
+
+ffigen:
+  output: 'lib/generated_bindings.dart'
+  headers:
+    entry-points:
+      - '/usr/include/openssl/sha.h'
